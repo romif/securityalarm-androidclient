@@ -79,8 +79,9 @@ public class SignInFragment extends Fragment {
 
                         try {
                             OAuth2RestTemplate restTemplate = ResourceConfiguration.restTemplate(properties.getProperty("security.oauth2.client.access-token-uri"), properties.getProperty("security.oauth2.client.client-id"), properties.getProperty("security.oauth2.client.client-secret"), credentials[0].getId(), credentials[0].getPassword());
-                            OAuth2AccessToken oAuth2AccessToken = restTemplate.getAccessToken();
-                            return !oAuth2AccessToken.isExpired();
+                            String macAddress = WifiReceiver.getMacAddress(getContext());
+                            restTemplate.postForObject(properties.getProperty("securityalarm.server.url") + "/api/account/mac_address/" + macAddress, null, String.class);
+                            return true;
                         } catch (Exception e) {
                             Log.e("VerifyCredentialsTask", e.getMessage(), e);
                         }

@@ -2,6 +2,8 @@ package com.romif.securityalarm.androidclient;
 
 import android.app.Notification;
 import android.app.NotificationManager;
+import android.app.admin.DeviceAdminReceiver;
+import android.app.admin.DevicePolicyManager;
 import android.app.job.JobInfo;
 import android.app.job.JobScheduler;
 import android.content.BroadcastReceiver;
@@ -29,6 +31,9 @@ import com.google.android.gms.common.api.Status;
 import org.springframework.security.oauth2.client.OAuth2RestTemplate;
 
 import java.io.IOException;
+import java.net.NetworkInterface;
+import java.util.Collections;
+import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
@@ -39,34 +44,8 @@ public class WifiReceiver extends BroadcastReceiver implements
     private static final String TAG = "WifiReceiver";
 
     private GoogleApiClient mGoogleApiClient;
-    private Properties properties = new Properties();
 
-    public static void scheduleJob(Context context, Properties properties, Credential credential) {
-        String[] jobParams = new String[]{properties.getProperty("security.oauth2.client.access-token-uri"), properties.getProperty("security.oauth2.client.client-id"), properties.getProperty("security.oauth2.client.client-secret"), credential.getId(), credential.getPassword(), properties.getProperty("securityalarm.client.url")};
 
-        ComponentName serviceComponent = new ComponentName(context, PingDeviceService.class);
-        JobInfo.Builder builder = new JobInfo.Builder(0, serviceComponent);
-        //builder.setMinimumLatency(5 * 1000); // wait at least
-        //builder.setOverrideDeadline(20 * 1000); // maximum delay
-        builder.setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY);
-        builder.setPeriodic(20 * 1000);
-        //builder.setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED); // require unmetered network
-        //builder.setRequiresDeviceIdle(true); // device should be idle
-        //builder.setRequiresCharging(false); // we don't care if the device is charging or not
-        JobScheduler jobScheduler = context.getSystemService(JobScheduler.class);
-        PersistableBundle bundle = new PersistableBundle();
-        bundle.putStringArray("jobParams", jobParams);
-        builder.setExtras(bundle);
-        jobScheduler.schedule(builder.build());
-
-        AlarmNotification.notify(context, AlarmState.PAUSED, 333);
-    }
-
-    public static void cancelJob(Context context) {
-        JobScheduler jobScheduler = context.getSystemService(JobScheduler.class);
-        jobScheduler.cancel(0);
-        AlarmNotification.notify(context, AlarmState.RESUMED, 333);
-    }
 
     public static boolean isConnectedToDevice(final Context context, String ssid) {
         WifiManager wifiMgr = (WifiManager) context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
@@ -75,15 +54,43 @@ public class WifiReceiver extends BroadcastReceiver implements
 
             WifiInfo wifiInfo = wifiMgr.getConnectionInfo();
 
-            return ssid.equals(wifiInfo.getSSID()); // Connected to an access point
+            return ssid.equals(wifiInfo.getSSID().replaceAll("\"", "")); // Connected to an access point
         } else {
             return false; // Wi-Fi adapter is OFF
         }
     }
 
+    public static String getMacAddress(Context context) {
+
+        try {
+            List<NetworkInterface> all = Collections.list(NetworkInterface.getNetworkInterfaces());
+            for (NetworkInterface nif : all) {
+                if (!nif.getName().equalsIgnoreCase("wlan0")) continue;
+
+                byte[] macBytes = nif.getHardwareAddress();
+                if (macBytes == null) {
+                    return "";
+                }
+
+                StringBuilder stringBuilder = new StringBuilder();
+                for (byte b : macBytes) {
+                    stringBuilder.append(String.format("%02X:",b));
+                }
+
+                if (stringBuilder.length() > 0) {
+                    stringBuilder.deleteCharAt(stringBuilder.length() - 1);
+                }
+                return stringBuilder.toString();
+            }
+        } catch (Exception ex) {
+        }
+        return "02:00:00:00:00:00";
+    }
+
+
     @Override
     public void onReceive(final Context context, Intent intent) {
-        try {
+        /*try {
             NetworkInfo info = intent.getParcelableExtra(WifiManager.EXTRA_NETWORK_INFO);
             if (info != null && info.isConnected()) {
 
@@ -114,7 +121,7 @@ public class WifiReceiver extends BroadcastReceiver implements
 
                                 Credential credential = credentialRequestResult.getCredential();
                                 Log.d(TAG, "User: " + credential.getId());
-                                scheduleJob(context, properties, credential);
+                                PingDeviceService.scheduleJob(context, properties, credential);
 
                             } else if (status.getStatusCode() == CommonStatusCodes.SIGN_IN_REQUIRED) {
                                 AlarmNotification.notify(context, AlarmState.INCORRECT_CREDENTIALS, 333);
@@ -129,11 +136,11 @@ public class WifiReceiver extends BroadcastReceiver implements
 
 
             } else if (info != null && !info.isConnected()) {
-                cancelJob(context);
+                PingDeviceService.cancelJob(context);
             }
         } catch (Exception e) {
             Log.e(TAG, "Error", e);
-        }
+        }*/
     }
 
     @Override
